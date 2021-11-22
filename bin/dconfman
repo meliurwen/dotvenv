@@ -1,0 +1,101 @@
+#!/bin/sh
+
+set -e
+
+backup() {
+    TMP_DFILE="$(mktemp)"
+    dconf dump "$1" > "$TMP_DFILE"
+
+    blist_ini "${TMP_DFILE}" "${2}"
+    clean_nlines_ini "${TMP_DFILE}"
+
+    cat "$TMP_DFILE" > "$3"
+    rm "$TMP_DFILE"
+}
+
+apply() {
+    if [ -f "$2" ]; then
+        < "$2" dconf load "$1"
+    else
+        echo "The file \"${2}\" does not exist. Aborting..."
+        exit 1
+    fi
+}
+
+err_var_noset() {
+    echo "Variable $1 is not set. Aborting..." && exit 1
+}
+
+if [ $# -eq 0 ]; then
+    echo "No arguments provided: use \"-h\" for help. Aborting..."
+    exit 1
+fi
+
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "usage: dconfman [-h] <-b|-a> dirPath
+
+Backup selected dconf database settings in a reproducible, stable and clean
+file; perfect for version control systems and keep track to only the relevant
+settings that truly matter, keeping out the noise.
+
+required arguments:
+  -h, --help            show this help message and exit
+  -b, --backup          backup dconf database settings
+  -a. --apply           apply backupped settings to dconf database
+  
+example:
+dconfman --backup .gedit
+dconfman --apply .gedit"
+    exit 0
+fi
+
+if [ ! $# -eq 2 ]; then
+    echo "Exactly two (2) arguments are needed. Aborting..."
+    exit 1
+fi
+
+if [ -f "$2/.dotenv" ]; then
+    . "$2/.dotenv"
+else
+    echo "The \"$2/.dotenv\" file is not present. Aborting..."
+    exit 1
+fi
+
+if [ -n "$KIND" ]; then
+    if [ "$KIND" != "dconf" ]; then
+        echo "This is a $KIND, not a dconf dir."
+        exit 1
+    fi
+else
+    echo "No \"KIND\" variable defined in \"$2/.dotenv\". Aborting..."
+    exit 1
+fi
+
+[ -z "$DOTSCRIPTS_D" ] && err_var_noset "DOTSCRIPTS_D"
+
+[ -z "$SCRIPTS_LIST" ] && err_var_noset "SCRIPTS_LIST"
+[ -z "$DPATH" ] && err_var_noset "DPATH"
+[ -z "$DLIST_FILE" ] && err_var_noset "DLIST_FILE"
+[ -z "$INI_DST" ] && err_var_noset "INI_DST"
+
+_IFS="$IFS"
+IFS=","
+for SCRIPT in $SCRIPTS_LIST; do
+    . "${DOTSCRIPTS_D}/${SCRIPT}"
+done
+IFS="$_IFS"
+
+case $1 in
+    "--backup"|"-b")
+        echo "Backing up \"$DPATH\" in \"$2/$INI_DST\" file..."
+        backup "$DPATH" "$2/$DLIST_FILE" "$2/$INI_DST"
+    ;;
+    "--apply"|"-a")
+        echo "Applying \"$2/$INI_DST\" to \"$DPATH\"..."
+        apply "$DPATH" "$2/$INI_DST"
+    ;;
+    *)
+        echo "Unknown parameter: use \"-h\" for help. Aborting..."
+        exit 1
+    ;;
+esac

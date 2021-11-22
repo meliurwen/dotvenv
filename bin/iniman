@@ -1,0 +1,44 @@
+#!/bin/sh
+
+set -e
+
+blist_ini() {
+    if [ ! $# -eq 2 ]; then
+        echo "You need to provide: INI_FILE, BLIST_FILE. Aborting..."
+        exit 1
+    fi
+    INI_FILE=$1
+    BLIST_FILE=$2
+    while IFS=" " read -r SECTION PARAM; do
+        if [ -n "$SECTION" ] && [ -n "$PARAM" ]; then
+            awk -v sh_sect="${SECTION}" \
+                -v sh_param="${PARAM}" \
+                -i inplace \
+                -F \
+                ' *= *' '/^\[.*\]$/{ section = substr($0, 2, length - 2) } section == sh_sect && $1 == sh_param { next } {print}' \
+                "$INI_FILE"
+        elif [ -n "$SECTION" ]; then
+            awk -v sh_sect="[${SECTION}]" \
+                -i inplace \
+                '/^\[.*\]$/{ f = 0 } $0 == sh_sect { f = 1 } !f' \
+                "$INI_FILE"
+        else
+            echo "Empty line in '${BLIST_FILE}'."
+        fi
+    done < "$BLIST_FILE"
+}
+
+clean_nlines_ini() {
+    if [ ! $# -eq 1 ]; then
+        echo "You need to provide: INI_FILE. Aborting..."
+        exit 1
+    fi
+    INI_FILE=$1
+    # Replace extra newlines with only double (newlines between sections)
+    #awk -i inplace 'BEGIN{RS="";ORS="\n\n"}1' "$INI_DFILE"
+
+    # Trim the EOF in order to end it with exactly one newline
+    awk -i inplace \
+        '/^$/ {nlstack=nlstack "\n";next;} {printf "%s",nlstack; nlstack=""; print;}' \
+        "$INI_FILE"
+}
